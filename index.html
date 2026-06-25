@@ -481,7 +481,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- FIREBASE CONFIGURATION ---
         const firebaseConfig = {
@@ -516,7 +516,9 @@
         setLoadStatus("Initializing App Data...");
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const db = getFirestore(app);
+        
+        // Use forced long polling to bypass strict adblockers and WebKit restrictions on mobile
+        const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 
         // Paths
         const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
@@ -540,7 +542,7 @@
                 }
             } catch (err) {
                 console.error("Auth failed:", err);
-                document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6 bg-slate-900 border border-rose-500 p-6 rounded-xl max-w-md"><h2 class="text-xl font-black text-rose-500 uppercase mb-2">Auth Error</h2><p class="text-slate-300 text-sm mb-4">${err.message}</p></div>`;
+                document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6 bg-slate-900 border border-rose-500 p-6 rounded-xl max-w-md mx-auto"><h2 class="text-xl font-black text-rose-500 uppercase mb-2">Auth Error</h2><p class="text-slate-300 text-sm mb-4">${err.message}</p></div>`;
             }
         };
 
@@ -576,7 +578,11 @@
                 }
             } catch (e) {
                 console.error("Database fetch error:", e);
-                document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6 bg-slate-900 border border-rose-500 p-6 rounded-xl max-w-md"><h2 class="text-xl font-black text-rose-500 uppercase mb-2">Database Error</h2><p class="text-slate-300 text-sm mb-4">${e.message}</p></div>`;
+                let errorMsg = e.message;
+                if (e.message.toLowerCase().includes("offline")) {
+                    errorMsg = "Your browser is blocking the live connection. <br><br><b>1. Using a downloaded file?</b> If you opened this file directly from your phone's storage (it says <code>file:///</code> in the address bar), Firebase will block it. You MUST host it on a web server (like GitHub Pages) and open the <code>https://</code> link.<br><br><b>2. Adblockers:</b> If you are on a website, turn off Brave Shields or AdBlockers for this page.";
+                }
+                document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6 bg-slate-900 border border-rose-500 p-6 rounded-xl max-w-md mx-auto"><h2 class="text-xl font-black text-rose-500 uppercase mb-2">Connection Blocked</h2><p class="text-slate-300 text-sm mb-4">${errorMsg}</p></div>`;
             }
         }
 
