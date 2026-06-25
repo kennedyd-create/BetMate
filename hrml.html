@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BetMate | Social Sportsbook</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        :root {
+            --bm-dark: #0f172a;
+            --bm-darker: #020617;
+            --bm-accent: #10b981;
+            --bm-panel: #1e293b;
+            --bm-border: #334155;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bm-darker);
+            color: #f8fafc;
+            line-height: 1.6;
+        }
+
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+        .glass-card {
+            background: var(--bm-panel);
+            border: 1px solid var(--bm-border);
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .nav-btn {
+            padding: 0.75rem 1.25rem;
+            color: #94a3b8;
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .nav-btn:hover { color: #f8fafc; }
+        .nav-active {
+            border-bottom-color: var(--bm-accent);
+            color: var(--bm-accent);
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: var(--bm-darker); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--bm-border); border-radius: 3px; }
+        .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #475569; }
+
+        .modal-overlay {
+            background: rgba(2, 6, 23, 0.9);
+            backdrop-filter: blur(8px);
+        }
+        
+        .chart-container { position: relative; width: 100%; max-width: 800px; margin: 0 auto; height: 250px; }
+
+        /* Loader */
+        .loader { border: 3px solid #1e293b; border-top: 3px solid #10b981; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="p-4 md:p-8 custom-scrollbar">
+
+    <!-- INITIAL LOADING SCREEN -->
+    <div id="loading-screen" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-950">
+        <div class="loader mb-4 w-12 h-12"></div>
+        <h2 class="text-xl font-black text-white uppercase tracking-widest animate-pulse">Connecting to Lobby...</h2>
+    </div>
+
+    <!-- WELCOME MODAL (Forces Name Entry) -->
+    <div id="welcome-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4">
+        <div class="glass-card w-full max-w-md p-8 bg-slate-900 shadow-2xl relative text-center border-emerald-500 border-t-4">
+            <div class="bg-slate-950 inline-block p-4 rounded-full mb-6 border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                <svg class="w-12 h-12 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <h2 class="text-3xl font-black text-white mb-2 uppercase italic">Bet<span class="text-emerald-500">Mate</span></h2>
+            <p class="text-slate-400 mb-6 text-sm">Enter your name to join the live pool. Everyone starts the month with <span class="text-emerald-400 font-mono font-bold">BM$ 100</span>.</p>
+            
+            <input type="text" id="user-name-input" placeholder="Your Name or Nickname" class="w-full bg-slate-800 border border-slate-600 text-white font-bold rounded-lg p-4 outline-none focus:border-emerald-500 transition mb-4 text-center text-lg">
+            
+            <button id="btn-enter-app" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-wider py-4 rounded-xl transition shadow-[0_0_15px_rgba(16,185,129,0.4)]">
+                Enter the Lobby
+            </button>
+        </div>
+    </div>
+
+    <div id="main-app" class="max-w-7xl mx-auto relative hidden opacity-0 transition-opacity duration-500">
+        <!-- HEADER -->
+        <header class="glass-card p-6 md:p-10 mb-8 relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6 border-b-4 border-b-emerald-500">
+            <div class="relative z-10 flex items-center gap-4">
+                <div class="bg-slate-900 border-2 border-emerald-500 rounded-2xl p-3 shadow-[0_0_15px_rgba(16,185,129,0.3)] hidden md:block">
+                    <svg class="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl md:text-5xl font-black tracking-tighter uppercase italic">Bet<span class="text-emerald-500">Mate</span></h1>
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1">
+                        <h2 class="text-sm md:text-md text-slate-400 font-medium">Multiplayer Pool Betting</h2>
+                        <button onclick="window.openHowItWorks()" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-md border border-slate-600 transition flex items-center justify-center gap-1 w-max">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            How it works
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="relative z-10 bg-slate-900 border border-slate-700 rounded-xl p-4 flex flex-wrap items-center gap-6 shadow-inner justify-center">
+                <div>
+                    <p class="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1">Player</p>
+                    <p class="text-md font-bold text-white" id="display-user-name">...</p>
+                </div>
+                <div class="w-px h-10 bg-slate-700 hidden sm:block"></div>
+                <div>
+                    <p class="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">Bankroll</p>
+                    <p class="text-xl font-black text-emerald-400 font-mono" id="user-balance">BM$ 0.00</p>
+                </div>
+                <div class="w-px h-10 bg-slate-700 hidden sm:block"></div>
+                <div>
+                    <p class="text-xs text-slate-400 uppercase tracking-wider font-bold mb-1">In Play</p>
+                    <p class="text-lg font-bold text-amber-400 font-mono" id="user-pending">BM$ 0.00</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- NAVIGATION -->
+        <nav class="flex items-center justify-center border-b border-slate-700 mb-8 gap-2 md:gap-6 overflow-x-auto pb-1">
+            <button id="nav-lobby" class="nav-btn nav-active" data-action="view" data-target="lobby">🏟️ The Lobby</button>
+            <button id="nav-challenge" class="nav-btn" data-action="view" data-target="challenge">⚡ Create Challenge</button>
+            <button id="nav-slips" class="nav-btn" data-action="view" data-target="slips">🎟️ My Action</button>
+            <button id="nav-squad" class="nav-btn" data-action="view" data-target="squad">👑 Leaderboard & Settlement</button>
+        </nav>
+
+        <!-- TAB 1: THE LOBBY -->
+        <div id="view-lobby" class="space-y-10 animate-in fade-in duration-500 hidden">
+            
+            <!-- Open Challenges Section -->
+            <section>
+                <div class="flex items-center justify-between mb-4 border-b border-slate-700 pb-2">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span> 
+                        Live Open Challenges
+                    </h3>
+                    <span class="text-xs text-slate-400 hidden sm:inline">Picks are hidden until locked in!</span>
+                </div>
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6" id="challenges-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+            <!-- Upcoming Events Section -->
+            <section>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 border-b border-slate-700 pb-2 gap-4">
+                    <h3 class="text-xl font-bold text-slate-300">Upcoming Fixtures</h3>
+                    <button onclick="window.openCommishModal()" class="bg-slate-800 hover:bg-slate-700 text-amber-400 text-xs font-bold px-4 py-2 rounded-lg border border-amber-900 transition flex items-center justify-center gap-2 shadow-md w-full sm:w-auto">
+                        ⚙️ Commissioner Panel
+                    </button>
+                </div>
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6" id="events-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+        </div>
+
+        <!-- TAB 2: CREATE CHALLENGE -->
+        <div id="view-challenge" class="hidden space-y-8 animate-in fade-in duration-500">
+            <div class="text-center max-w-2xl mx-auto mb-6">
+                <h2 class="text-3xl font-black text-white mb-2">Build a Pool Challenge</h2>
+                <p class="text-slate-400">Set your wager and make your pick. Your pick remains hidden in the lobby until someone matches it.</p>
+            </div>
+
+            <div class="max-w-3xl mx-auto glass-card p-6 md:p-10 border-t-4 border-t-emerald-500">
+                <div class="bg-slate-900 border border-emerald-900 rounded-xl p-4 mb-8 flex gap-4 items-start">
+                    <div class="text-2xl">⚖️</div>
+                    <div class="text-sm text-slate-300">
+                        <strong class="text-emerald-400 block mb-1">Winner-Takes-All Rules:</strong>
+                        <ul class="list-disc pl-4 space-y-1">
+                            <li>Correct pick(s) take the entire pool of wagers.</li>
+                            <li>Multiple winners split the pool proportionally.</li>
+                            <li>If everyone is wrong, OR everyone picks the same correct result, all money is refunded.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">1. Select Event</label>
+                        <select id="create-event-select" class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-3 outline-none focus:border-emerald-500 transition">
+                            <option value="" disabled selected>Choose an upcoming event...</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">2. Margin/Outcome Pick (Hidden from others)</label>
+                        <select id="create-pick-select" disabled class="w-full bg-slate-900 border border-slate-700 text-white rounded-lg p-3 outline-none focus:border-emerald-500 transition disabled:opacity-50">
+                            <option value="" disabled selected>Select an event first...</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">3. Wager (BM$)</label>
+                        <input type="number" id="create-wager" placeholder="e.g. 20" class="w-full bg-slate-900 border border-slate-700 text-emerald-400 font-mono font-bold rounded-lg p-3 outline-none focus:border-emerald-500 transition">
+                    </div>
+
+                    <button id="btn-create-challenge" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-wider py-4 rounded-xl transition shadow-[0_0_15px_rgba(16,185,129,0.4)] mt-4">
+                        Lock In & Post to Lobby
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: MY ACTION -->
+        <div id="view-slips" class="hidden space-y-6 animate-in fade-in duration-500">
+            <h2 class="text-3xl font-black text-white mb-6">Action Tracker</h2>
+            
+            <div class="grid lg:grid-cols-3 gap-6">
+                <!-- Active Bets -->
+                <div class="lg:col-span-2 space-y-4">
+                    <h3 class="text-lg font-bold text-slate-300 border-b border-slate-700 pb-2">My Slips</h3>
+                    <div id="my-bets-container" class="space-y-4">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- History / Stats -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-bold text-slate-300 border-b border-slate-700 pb-2">My Bankroll History</h3>
+                    <div class="glass-card p-6">
+                        <div class="mt-2 chart-container">
+                            <canvas id="bankrollChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: SQUAD LEADERBOARD & SETTLEMENT -->
+        <div id="view-squad" class="hidden space-y-6 animate-in fade-in duration-500">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                <div>
+                    <h2 class="text-3xl font-black text-white mb-1">Squad Leaderboard</h2>
+                    <p class="text-slate-400">Tracking monthly profit and loss against the starting BM$ 100.</p>
+                </div>
+                <button class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-xl transition shadow-lg flex items-center gap-2" onclick="window.openSettlementModal()">
+                    📅 Run End of Month Settlement
+                </button>
+            </div>
+
+            <div class="glass-card overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-900 border-b border-slate-700 text-xs uppercase tracking-wider text-slate-400">
+                            <th class="p-4 font-bold">Rank</th>
+                            <th class="p-4 font-bold">Bettor</th>
+                            <th class="p-4 font-bold text-center">Net P/L</th>
+                            <th class="p-4 font-bold text-right">Current Bankroll</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-sm font-medium" id="leaderboard-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- MODALS -->
+
+    <!-- JOIN CHALLENGE MODAL -->
+    <div id="join-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4">
+        <div class="glass-card w-full max-w-md p-6 bg-slate-900 shadow-2xl relative animate-in zoom-in-95 duration-200 border-emerald-500 border-t-4">
+            <button class="absolute top-4 right-4 text-slate-400 hover:text-white" onclick="window.closeJoinModal()">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            
+            <h3 class="text-2xl font-black text-white mb-1" id="join-match-title">Match Name</h3>
+            <p class="text-sm text-slate-400 mb-6">Challenge by <span class="text-indigo-400 font-bold" id="join-creator-name">Name</span></p>
+
+            <div class="bg-slate-950 border border-slate-800 rounded-lg p-4 mb-6 flex justify-between items-center">
+                <div class="text-slate-400 text-sm">Current Pool</div>
+                <div class="text-2xl font-black text-emerald-400 font-mono" id="join-pool-amount">BM$ 0</div>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Your Blind Pick</label>
+                    <select id="join-pick" class="w-full bg-slate-800 border border-slate-600 text-white rounded-lg p-3 outline-none focus:border-emerald-500 transition"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Your Wager (BM$)</label>
+                    <input type="number" id="join-wager" placeholder="e.g. 50" class="w-full bg-slate-800 border border-slate-600 text-emerald-400 font-mono font-bold rounded-lg p-3 outline-none focus:border-emerald-500 transition">
+                </div>
+                <button id="btn-confirm-join" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-wider py-3 rounded-xl transition mt-4">
+                    Lock In Pick
+                </button>
+            </div>
+            
+            <div id="join-reveal" class="hidden mt-6 pt-6 border-t border-slate-700 text-center">
+                <h4 class="text-sm font-bold text-emerald-400 uppercase tracking-wider mb-2">✅ Locked in!</h4>
+                <p class="text-slate-400 text-sm mb-4">You can now view everyone's picks in the 'My Action' tab.</p>
+                <button class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-lg transition" onclick="window.closeJoinModal(true)">Go to My Slips</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- COMMISSIONER MODAL (Add/Settle Games) -->
+    <div id="commish-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4">
+        <div class="glass-card w-full max-w-lg p-6 bg-slate-900 shadow-2xl relative border-amber-500 border-t-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <button class="absolute top-4 right-4 text-slate-400 hover:text-white" onclick="window.closeCommishModal()">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+
+            <h3 class="text-2xl font-black text-white mb-2">⚙️ Commissioner Panel</h3>
+            <p class="text-sm text-slate-400 mb-6">Manage real fixtures and settle match results to distribute payouts.</p>
+
+            <div class="border-b border-slate-700 mb-4 flex gap-4">
+                <button id="tab-add-match" class="text-amber-400 font-bold border-b-2 border-amber-400 pb-2" onclick="window.switchCommishTab('add')">Add Real Game</button>
+                <button id="tab-settle-match" class="text-slate-400 hover:text-white font-bold border-b-2 border-transparent pb-2 transition" onclick="window.switchCommishTab('settle')">Settle Results</button>
+            </div>
+
+            <!-- Add Match View -->
+            <div id="commish-add-view" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Sport</label>
+                    <select id="commish-sport" class="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 outline-none">
+                        <option value="Rugby">Rugby</option>
+                        <option value="Football">Football (FIFA)</option>
+                        <option value="Cricket">Cricket (NZ)</option>
+                        <option value="F1">Formula 1</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Match/Event Name</label>
+                    <input type="text" id="commish-match" placeholder="e.g. All Blacks vs England" class="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Team 1</label>
+                        <input type="text" id="commish-t1" placeholder="All Blacks" class="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Team 2</label>
+                        <input type="text" id="commish-t2" placeholder="England" class="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">F1 Drivers (Comma separated - only for F1)</label>
+                    <input type="text" id="commish-drivers" placeholder="Verstappen, Norris, Hamilton..." class="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Date</label>
+                        <input type="text" id="commish-date" placeholder="Saturday" class="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Time</label>
+                        <input type="text" id="commish-time" placeholder="7:05 PM" class="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 outline-none">
+                    </div>
+                </div>
+                <button id="btn-commish-add" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-lg mt-4 transition">Post Game to Lobby</button>
+            </div>
+
+            <!-- Settle Match View -->
+            <div id="commish-settle-view" class="space-y-4 hidden">
+                <p class="text-xs text-rose-400 mb-2">Warning: Settling a match is final and will immediately distribute BM$ to winners.</p>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Select Active Match</label>
+                    <select id="commish-settle-match" class="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 outline-none" onchange="window.commishSettleMatchChanged()"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Actual Result</label>
+                    <select id="commish-settle-outcome" class="w-full bg-slate-800 border border-slate-600 text-white rounded p-2 outline-none" disabled>
+                        <option value="" disabled selected>Select a match first...</option>
+                    </select>
+                </div>
+                <button id="btn-commish-settle" class="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 rounded-lg mt-4 transition">Settle Match & Distribute Funds</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MONTHLY SETTLEMENT MODAL -->
+    <div id="settlement-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4">
+        <div class="glass-card w-full max-w-lg p-8 bg-slate-900 shadow-2xl relative border-indigo-500 border-t-4">
+            <h3 class="text-2xl font-black text-white mb-2 text-center">End of Month Settlement</h3>
+            <p class="text-sm text-slate-400 mb-6 text-center">Calculated against the starting BM$ 100.</p>
+            
+            <div class="space-y-2 mb-8 bg-slate-950 p-4 rounded-lg border border-slate-800 max-h-64 overflow-y-auto custom-scrollbar" id="settlement-list">
+                <!-- Populated by JS -->
+            </div>
+            
+            <div class="text-center">
+                <p class="text-xs text-rose-400 font-bold uppercase mb-4">Warning: This will reset everyone to BM$ 100 and clear all active slips globally.</p>
+                <div class="flex gap-2">
+                    <button class="w-1/2 bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-lg" onclick="document.getElementById('settlement-modal').classList.add('hidden')">Cancel</button>
+                    <button class="w-1/2 bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3 rounded-lg uppercase tracking-wider" onclick="window.confirmResetMonth()">Reset Month</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HOW IT WORKS MODAL -->
+    <div id="how-it-works-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay p-4">
+        <div class="glass-card w-full max-w-lg p-6 md:p-8 bg-slate-900 shadow-2xl relative animate-in zoom-in-95 duration-200 border-emerald-500 border-t-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <button class="absolute top-4 right-4 text-slate-400 hover:text-white" onclick="window.closeHowItWorks()">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            
+            <h3 class="text-2xl font-black text-white mb-4 flex items-center gap-2">
+                <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                How BetMate Works
+            </h3>
+            
+            <div class="space-y-6 text-sm text-slate-300">
+                <div>
+                    <h4 class="font-bold text-emerald-400 uppercase tracking-wider mb-1">1. The Bankroll</h4>
+                    <p>Everyone starts the month with exactly <strong>BM$ 100</strong>. You cannot top up or add more money during the month. Manage your bankroll wisely!</p>
+                </div>
+                
+                <div>
+                    <h4 class="font-bold text-emerald-400 uppercase tracking-wider mb-1">2. Blind Pools</h4>
+                    <p>Create a challenge on an upcoming match and set a wager. <strong>Your pick is hidden</strong> from the lobby. Other players can see the pool size and join in blindly. Picks are only revealed to you once you lock in your own wager.</p>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-emerald-400 uppercase tracking-wider mb-1">3. Winner-Takes-All</h4>
+                    <ul class="list-disc pl-5 space-y-1 mt-1">
+                        <li>The player(s) with the correct pick take the entire pool.</li>
+                        <li>If multiple players win, the pool is split proportionally based on their wagers.</li>
+                        <li>If <strong>everyone is wrong</strong>, or <strong>everyone picks the exact same outcome</strong>, all wagers are safely refunded.</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h4 class="font-bold text-emerald-400 uppercase tracking-wider mb-1">4. End of Month Settlement</h4>
+                    <p>At the end of the month, the Commissioner runs the settlement. BetMate calculates exactly who is in profit and who is in the red compared to the starting BM$ 100. Losers pay out to winners in real life, and the app resets everyone to BM$ 100 for the new month.</p>
+                </div>
+            </div>
+            
+            <button class="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-xl transition mt-8" onclick="window.closeHowItWorks()">Got it!</button>
+        </div>
+    </div>
+
+    <!-- FLOATING CHAT BUTTON -->
+    <button onclick="window.toggleChat()" class="fixed bottom-6 right-6 z-40 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full p-4 shadow-[0_0_15px_rgba(79,70,229,0.5)] transition flex items-center justify-center group border-2 border-indigo-400 hidden" id="chat-fab">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+        <span class="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md hidden" id="chat-badge">!</span>
+    </button>
+
+    <!-- CHAT DRAWER -->
+    <div id="chat-drawer" class="fixed inset-y-0 right-0 w-full sm:w-96 bg-slate-900 border-l border-slate-700 shadow-2xl transform translate-x-full transition-transform duration-300 z-[60] flex flex-col">
+        <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+            <h3 class="text-white font-black italic tracking-wider">SQUAD BANTER 💬</h3>
+            <button onclick="window.toggleChat()" class="text-slate-400 hover:text-white p-1">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-slate-900/50">
+            <!-- Messages go here -->
+        </div>
+        <div class="p-4 border-t border-slate-800 bg-slate-950">
+            <div class="flex gap-2">
+                <input type="text" id="chat-input" placeholder="Talk some trash..." class="w-full bg-slate-800 border border-slate-600 text-white rounded-lg p-3 outline-none focus:border-indigo-500 transition text-sm placeholder-slate-500">
+                <button id="btn-send-chat" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 rounded-lg font-bold transition shadow-md">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FIREBASE MULTIPLAYER ENGINE -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configuration
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'betmate-default';
+
+        // Paths
+        const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+        const matchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'matches');
+        const challengesRef = collection(db, 'artifacts', appId, 'public', 'data', 'challenges');
+        const chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
+
+        // Global Client State
+        let currentUser = null;
+        const INITIAL_FUNDS = 100.00;
+        let myUserData = { name: "Player", bankroll: INITIAL_FUNDS, won: 0 };
+        
+        let usersData = [];
+        let matchesData = [];
+        let challengesData = [];
+        let chatData = [];
+        
+        let bankrollHistory = [INITIAL_FUNDS]; // Local memory for graph
+        let bankrollChartInstance = null;
+        let chatOpen = false;
+
+        // Ensure user sees loading first
+        document.getElementById('loading-screen').classList.remove('hidden');
+
+        // Authentication Routine
+        const initAuth = async () => {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth failed:", err);
+                alert("Failed to connect to the live server. Please refresh.");
+            }
+        };
+
+        initAuth();
+
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                await checkUserExists();
+                setupRealtimeListeners();
+            }
+        });
+
+        // Check if user has joined the pool before
+        async function checkUserExists() {
+            if (!currentUser) return;
+            const userDocRef = doc(usersRef, currentUser.uid);
+            try {
+                const snap = await getDoc(userDocRef);
+                if (snap.exists()) {
+                    myUserData = snap.data();
+                    document.getElementById('loading-screen').classList.add('hidden');
+                    document.getElementById('main-app').classList.remove('hidden');
+                    document.getElementById('main-app').classList.remove('opacity-0');
+                    document.getElementById('chat-fab').classList.remove('hidden');
+                    updateHeaderBalances();
+                    showView('lobby');
+                } else {
+                    // New user: show Welcome Modal to get name
+                    document.getElementById('loading-screen').classList.add('hidden');
+                    document.getElementById('welcome-modal').classList.remove('hidden');
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // --- REALTIME LISTENERS ---
+        function setupRealtimeListeners() {
+            if (!currentUser) return;
+
+            // 1. Users (Leaderboard)
+            onSnapshot(usersRef, (snapshot) => {
+                usersData = [];
+                snapshot.forEach(doc => {
+                    let data = doc.data();
+                    data.id = doc.id;
+                    usersData.push(data);
+                    if (data.id === currentUser.uid) {
+                        myUserData = data;
+                        updateHeaderBalances();
+                    }
+                });
+                renderLeaderboard();
+            }, (err) => console.error(err));
+
+            // 2. Matches (Upcoming Games)
+            onSnapshot(matchesRef, async (snapshot) => {
+                matchesData = [];
+                snapshot.forEach(doc => {
+                    let m = doc.data();
+                    m.id = doc.id;
+                    matchesData.push(m);
+                });
+                
+                // Seed initial matches if none exist
+                if (matchesData.length === 0) {
+                    await seedMatches();
+                }
+
+                if(document.getElementById('view-lobby').classList.contains('hidden') === false) renderLobby();
+                if(document.getElementById('view-challenge').classList.contains('hidden') === false) renderCreateChallenge();
+                populateCommishDropdowns();
+            }, (err) => console.error(err));
+
+            // 3. Challenges (Slips/Pools)
+            onSnapshot(challengesRef, (snapshot) => {
+                challengesData = [];
+                snapshot.forEach(doc => {
+                    let c = doc.data();
+                    c.id = doc.id;
+                    challengesData.push(c);
+                });
+                
+                updateHeaderBalances();
+                if(document.getElementById('view-lobby').classList.contains('hidden') === false) renderLobby();
+                if(document.getElementById('view-slips').classList.contains('hidden') === false) renderMySlips();
+            }, (err) => console.error(err));
+
+            // 4. Chat
+            onSnapshot(chatRef, (snapshot) => {
+                chatData = [];
+                snapshot.forEach(doc => chatData.push({ ...doc.data(), id: doc.id }));
+                
+                // Sort by timestamp
+                chatData.sort((a, b) => a.timestamp - b.timestamp);
+                renderChat();
+                
+                if (!chatOpen && chatData.length > 0) {
+                    document.getElementById('chat-badge').classList.remove('hidden');
+                }
+            }, (err) => console.error(err));
+        }
+
+        async function seedMatches() {
+            const seed = [
+                { sport: "Rugby", match: "All Blacks vs South Africa", t1: "All Blacks", t2: "South Africa", date: "Saturday", time: "7:05 PM", status: "upcoming" },
+                { sport: "Football", league: "FIFA World Cup", match: "New Zealand vs Brazil", t1: "New Zealand", t2: "Brazil", date: "Sunday", time: "4:00 AM", status: "upcoming" },
+                { sport: "F1", match: "British Grand Prix", t1: "F1", t2: "F1", drivers: "Verstappen, Norris, Hamilton, Russell, Piastri, Leclerc", date: "Monday", time: "2:00 AM", status: "upcoming" },
+                { sport: "Cricket", match: "Black Caps vs England", t1: "Black Caps", t2: "England", date: "Friday", time: "1:00 PM", status: "upcoming" }
+            ];
+            for (const m of seed) {
+                await addDoc(matchesRef, m);
+            }
+        }
+
+        // --- UTILS ---
+        function formatMoney(amount) { return parseFloat(amount).toFixed(2); }
+        
+        function getMarginPicks(ev) {
+            if (ev.sport === 'Rugby') return [`${ev.t1} 14+`, `${ev.t1} 1-13`, `Draw`, `${ev.t2} 1-13`, `${ev.t2} 14+`];
+            if (ev.sport === 'Football') return [`${ev.t1} by 2+`, `${ev.t1} by 1`, `Draw`, `${ev.t2} by 1`, `${ev.t2} by 2+`];
+            if (ev.sport === 'Cricket') return [`${ev.t1} Win`, `Draw`, `${ev.t2} Win`];
+            if (ev.sport === 'F1') {
+                return ev.drivers ? ev.drivers.split(',').map(d=>d.trim()) : ["Verstappen", "Norris", "Leclerc"];
+            }
+            return [`${ev.t1} Win`, `${ev.t2} Win`];
+        }
+
+        // --- ONBOARDING ACTIONS ---
+        document.getElementById('btn-enter-app').addEventListener('click', async () => {
+            if (!currentUser) return;
+            const inputName = document.getElementById('user-name-input').value.trim();
+            if (!inputName) { alert("Please enter a name."); return; }
+            
+            // Save to Firestore
+            const userDocRef = doc(usersRef, currentUser.uid);
+            await setDoc(userDocRef, { name: inputName, bankroll: INITIAL_FUNDS, won: 0 });
+            
+            myUserData = { name: inputName, bankroll: INITIAL_FUNDS, won: 0, id: currentUser.uid };
+            
+            document.getElementById('welcome-modal').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            // Small delay to allow CSS transition
+            setTimeout(() => document.getElementById('main-app').classList.remove('opacity-0'), 50);
+            document.getElementById('chat-fab').classList.remove('hidden');
+            
+            showView('lobby');
+        });
+
+        // --- CORE UI ---
+        function updateHeaderBalances() {
+            if (!myUserData) return;
+            document.getElementById('display-user-name').innerText = myUserData.name;
+            document.getElementById('user-balance').innerText = `BM$ ${formatMoney(myUserData.bankroll)}`;
+            
+            let pending = 0;
+            challengesData.forEach(ch => {
+                if (ch.status === 'open' || ch.status === 'matched') {
+                    ch.participants.forEach(p => { 
+                        if(p.uid === currentUser.uid) pending += parseFloat(p.wager); 
+                    });
+                }
+            });
+            document.getElementById('user-pending').innerText = `BM$ ${formatMoney(pending)}`;
+        }
+
+        // Assign to window for HTML onclick routing
+        window.showView = showView;
+        function showView(viewId) {
+            const views = ['lobby', 'challenge', 'slips', 'squad'];
+            views.forEach(v => {
+                document.getElementById(`view-${v}`).classList.add('hidden');
+                document.getElementById(`nav-${v}`).classList.remove('nav-active');
+            });
+            document.getElementById(`view-${viewId}`).classList.remove('hidden');
+            document.getElementById(`nav-${viewId}`).classList.add('nav-active');
+
+            if (viewId === 'lobby') renderLobby();
+            else if (viewId === 'challenge') renderCreateChallenge();
+            else if (viewId === 'slips') { renderMySlips(); initBankrollChart(); }
+            else if (viewId === 'squad') renderLeaderboard();
+        }
+
+        // --- TAB 1: LOBBY ---
+        function renderLobby() {
+            const challengesGrid = document.getElementById('challenges-grid');
+            challengesGrid.innerHTML = '';
+            
+            // Open challenges not joined by me
+            const joinable = challengesData.filter(c => c.status === 'open' && !c.participants.some(p => p.uid === currentUser.uid));
+            
+            if(joinable.length === 0) {
+                challengesGrid.innerHTML = `<div class="col-span-full p-6 border border-dashed border-slate-700 rounded-xl text-center text-slate-500">No open challenges available right now. Start a new pool!</div>`;
+            } else {
+                joinable.forEach(ch => {
+                    const pool = ch.participants.reduce((sum, p) => sum + p.wager, 0);
+                    const event = matchesData.find(e => e.id === ch.eventId) || {sport: "?", league: ""};
+                    const leagueLabel = event.league ? ` | ${event.league}` : '';
+                    
+                    challengesGrid.innerHTML += `
+                        <div class="glass-card p-5 border-l-4 border-l-amber-500 hover:bg-slate-800 transition cursor-pointer" onclick="window.openJoinModal('${ch.id}')">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="text-[10px] uppercase font-bold tracking-widest bg-slate-800 text-slate-400 px-2 py-1 rounded border border-slate-700">${event.sport}${leagueLabel}</span>
+                                <span class="text-amber-400 font-mono font-bold">Pool: BM$ ${formatMoney(pool)}</span>
+                            </div>
+                            <h4 class="font-bold text-white mb-1">${ch.matchName}</h4>
+                            <p class="text-sm text-slate-400 mb-4">By <span class="text-indigo-400 font-semibold">${ch.creatorName}</span> (+${ch.participants.length - 1} others)</p>
+                            <button class="w-full bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold py-2 rounded transition border border-slate-600">
+                                View & Join ⚡
+                            </button>
+                        </div>
+                    `;
+                });
+            }
+
+            const eventsGrid = document.getElementById('events-grid');
+            eventsGrid.innerHTML = '';
+            // Only upcoming matches
+            const upcoming = matchesData.filter(m => m.status === 'upcoming');
+            upcoming.forEach(ev => {
+                const leagueLabel = ev.league ? ` | ${ev.league}` : '';
+                eventsGrid.innerHTML += `
+                    <div class="glass-card p-4 flex flex-col justify-between hover:border-emerald-500 transition cursor-pointer" onclick="window.jumpToCreate('${ev.id}')">
+                        <div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] uppercase text-emerald-500 font-bold tracking-widest">${ev.date} @ ${ev.time}</span>
+                                <span class="text-[10px] uppercase text-slate-500 font-bold">${ev.sport}${leagueLabel}</span>
+                            </div>
+                            <h4 class="font-bold text-white mt-2">${ev.match}</h4>
+                        </div>
+                        <button class="mt-4 text-left text-sm text-emerald-400 font-semibold">Start Pool →</button>
+                    </div>
+                `;
+            });
+        }
+
+        // --- TAB 2: CREATE CHALLENGE ---
+        window.jumpToCreate = function(eventId) {
+            showView('challenge');
+            document.getElementById('create-event-select').value = eventId;
+            handleCreateEventChange();
+        };
+
+        function renderCreateChallenge() {
+            const select = document.getElementById('create-event-select');
+            select.innerHTML = '<option value="" disabled selected>Choose an upcoming event...</option>';
+            const upcoming = matchesData.filter(m => m.status === 'upcoming');
+            upcoming.forEach(ev => { select.innerHTML += `<option value="${ev.id}">${ev.match} (${ev.date})</option>`; });
+
+            document.getElementById('create-pick-select').innerHTML = '<option value="" disabled selected>Select an event first...</option>';
+            document.getElementById('create-pick-select').disabled = true;
+            document.getElementById('create-wager').value = '';
+        }
+
+        function handleCreateEventChange() {
+            const eventId = document.getElementById('create-event-select').value;
+            const pickSelect = document.getElementById('create-pick-select');
+            if(!eventId) return;
+            const ev = matchesData.find(e => e.id === eventId);
+            
+            const picks = getMarginPicks(ev);
+            pickSelect.innerHTML = '<option value="" disabled selected>Select your outcome pick...</option>';
+            picks.forEach(p => { pickSelect.innerHTML += `<option value="${p}">${p}</option>`; });
+            pickSelect.disabled = false;
+        }
+
+        document.getElementById('create-event-select').addEventListener('change', handleCreateEventChange);
+
+        document.getElementById('btn-create-challenge').addEventListener('click', async () => {
+            if (!currentUser) return;
+            const eventId = document.getElementById('create-event-select').value;
+            const pick = document.getElementById('create-pick-select').value;
+            const wager = parseFloat(document.getElementById('create-wager').value);
+
+            if(!eventId || !pick || isNaN(wager) || wager <= 0) {
+                alert("Please complete all fields."); return;
+            }
+            if(wager > myUserData.bankroll) {
+                alert(`Insufficient funds. Your balance is BM$ ${formatMoney(myUserData.bankroll)}`); return;
+            }
+
+            const ev = matchesData.find(e => e.id === eventId);
+            
+            const newChallenge = {
+                eventId: ev.id,
+                matchName: ev.match,
+                creatorName: myUserData.name,
+                creatorId: currentUser.uid,
+                status: "open",
+                participants: [{ uid: currentUser.uid, name: myUserData.name, pick: pick, wager: wager }]
+            };
+            
+            // Deduct funds
+            const newBal = myUserData.bankroll - wager;
+            await updateDoc(doc(usersRef, currentUser.uid), { bankroll: newBal });
+            bankrollHistory.push(newBal); // Update local graph
+
+            // Save Challenge to DB
+            await addDoc(challengesRef, newChallenge);
+            
+            alert("Challenge posted to the lobby! Your pick is hidden until others lock in.");
+            showView('lobby');
+        });
+
+        // --- JOIN MODAL ---
+        let activeJoinChallengeId = null;
+
+        window.openJoinModal = function(chId) {
+            activeJoinChallengeId = chId;
+            const ch = challengesData.find(c => c.id === chId);
+            const ev = matchesData.find(e => e.id === ch.eventId);
+            if (!ch || !ev) return;
+
+            const pool = ch.participants.reduce((sum, p) => sum + p.wager, 0);
+
+            document.getElementById('join-match-title').innerText = ch.matchName;
+            document.getElementById('join-creator-name').innerText = ch.creatorName;
+            document.getElementById('join-pool-amount').innerText = `BM$ ${formatMoney(pool)}`;
+            
+            const pickSelect = document.getElementById('join-pick');
+            const picks = getMarginPicks(ev);
+            pickSelect.innerHTML = '<option value="" disabled selected>Select your outcome pick...</option>';
+            picks.forEach(p => { pickSelect.innerHTML += `<option value="${p}">${p}</option>`; });
+
+            document.getElementById('join-wager').value = '';
+            document.getElementById('join-reveal').classList.add('hidden');
+            document.getElementById('btn-confirm-join').classList.remove('hidden');
+            document.getElementById('join-pick').disabled = false;
+            document.getElementById('join-wager').disabled = false;
+
+            document.getElementById('join-modal').classList.remove('hidden');
+        };
+
+        window.closeJoinModal = function(goToSlips = false) {
+            document.getElementById('join-modal').classList.add('hidden');
+            activeJoinChallengeId = null;
+            if (goToSlips === true) showView('slips');
+        };
+
+        document.getElementById('btn-confirm-join').addEventListener('click', async () => {
+            if (!currentUser || !activeJoinChallengeId) return;
+            const pick = document.getElementById('join-pick').value;
+            const wager = parseFloat(document.getElementById('join-wager').value);
+
+            if(!pick || isNaN(wager) || wager <= 0) { alert("Please enter a valid pick and wager."); return; }
+            if(wager > myUserData.bankroll) { alert(`Insufficient funds. Your balance is BM$ ${formatMoney(myUserData.bankroll)}`); return; }
+
+            const chRef = doc(challengesRef, activeJoinChallengeId);
+            const chDoc = await getDoc(chRef);
+            if (!chDoc.exists()) return;
+            let chData = chDoc.data();
+
+            // Deduct funds
+            const newBal = myUserData.bankroll - wager;
+            await updateDoc(doc(usersRef, currentUser.uid), { bankroll: newBal });
+            bankrollHistory.push(newBal);
+
+            // Update Challenge
+            let updatedParts = [...chData.participants, { uid: currentUser.uid, name: myUserData.name, pick: pick, wager: wager }];
+            await updateDoc(chRef, { participants: updatedParts, status: "matched" });
+
+            document.getElementById('btn-confirm-join').classList.add('hidden');
+            document.getElementById('join-pick').disabled = true;
+            document.getElementById('join-wager').disabled = true;
+            
+            document.getElementById('join-reveal').classList.remove('hidden');
+        });
+
+        // --- TAB 3: MY SLIPS ---
+        function renderMySlips() {
+            const container = document.getElementById('my-bets-container');
+            container.innerHTML = '';
+            
+            const userChalls = challengesData.filter(ch => ch.participants.some(p => p.uid === currentUser.uid));
+            
+            if(userChalls.length === 0) {
+                container.innerHTML = `<div class="p-6 border border-dashed border-slate-700 rounded-xl text-center text-slate-500">No active slips. Build a pool or join one!</div>`;
+                return;
+            }
+
+            [...userChalls].reverse().forEach(ch => {
+                const userPart = ch.participants.find(p => p.uid === currentUser.uid);
+                const totalPool = ch.participants.reduce((sum, p) => sum + p.wager, 0);
+                
+                let statusBadge = "";
+                if(ch.status === 'open') {
+                    statusBadge = `<span class="bg-amber-900/50 text-amber-400 border border-amber-700/50 text-[10px] uppercase font-bold px-2 py-1 rounded">Open Pool</span>`;
+                } else if (ch.status === 'matched') {
+                    statusBadge = `<span class="bg-emerald-900/50 text-emerald-400 border border-emerald-700/50 text-[10px] uppercase font-bold px-2 py-1 rounded">Locked In</span>`;
+                } else if (ch.status === 'settled') {
+                    statusBadge = `<span class="bg-slate-800 text-slate-400 border border-slate-600 text-[10px] uppercase font-bold px-2 py-1 rounded">Settled</span>`;
+                }
+
+                let opponentHtml = "";
+                if(ch.participants.length > 1) {
+                    opponentHtml = `<div class="mt-4 pt-3 border-t border-slate-700/50 text-xs text-slate-300"><strong class="text-slate-500 uppercase tracking-wider block mb-1">The Pool:</strong><ul class="space-y-1">`;
+                    ch.participants.forEach(p => {
+                        const nameDisplay = p.uid === currentUser.uid ? "You" : p.name;
+                        opponentHtml += `<li><span class="font-bold text-white">${nameDisplay}</span>: ${p.pick} <span class="text-slate-500">(BM$ ${p.wager})</span></li>`;
+                    });
+                    opponentHtml += `</ul></div>`;
+                } else {
+                    opponentHtml = `<div class="mt-4 pt-3 border-t border-slate-700/50 text-xs text-slate-500">Waiting for opponents to join. Your pick is hidden in the lobby.</div>`;
+                }
+
+                let resultHtml = "";
+                if (ch.status === 'settled') {
+                    const outcomeText = `<div class="text-xs text-center text-slate-400 mb-1">Actual Result: ${ch.actualResult}</div>`;
+                    
+                    // Determine what user won
+                    const winners = ch.participants.filter(p => p.pick === ch.actualResult);
+                    const winningWagers = winners.reduce((sum, p) => sum + p.wager, 0);
+                    let myPayout = 0;
+
+                    if (ch.refund) {
+                        resultHtml = `${outcomeText}<div class="bg-slate-800 p-2 rounded border border-slate-600 text-slate-300 font-bold text-sm text-center">Refunded: BM$ ${formatMoney(userPart.wager)}</div>`;
+                    } else if (userPart.pick === ch.actualResult) {
+                        const share = userPart.wager / winningWagers;
+                        myPayout = totalPool * share;
+                        resultHtml = `${outcomeText}<div class="bg-emerald-900/30 p-2 rounded border border-emerald-800 text-emerald-400 font-bold text-sm text-center">You Won: BM$ ${formatMoney(myPayout)}</div>`;
+                    } else {
+                        resultHtml = `${outcomeText}<div class="bg-rose-900/30 p-2 rounded border border-rose-800 text-rose-400 font-bold text-sm text-center">You Lost (BM$ ${formatMoney(userPart.wager)})</div>`;
+                    }
+                }
+
+                container.innerHTML += `
+                    <div class="glass-card p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center gap-2">${statusBadge}</div>
+                            <span class="text-amber-400 font-mono font-bold text-sm bg-amber-900/20 px-2 py-0.5 rounded border border-amber-900/50">Pool: BM$ ${formatMoney(totalPool)}</span>
+                        </div>
+                        <h4 class="text-white font-bold text-lg leading-tight mb-2">${ch.matchName}</h4>
+                        <div class="flex justify-between items-center bg-slate-900 p-2 rounded border border-slate-700">
+                            <p class="text-xs text-slate-400 uppercase tracking-wider font-bold">Your Pick:<br><span class="text-white text-sm normal-case">${userPart.pick}</span></p>
+                            <p class="text-xs text-slate-400 uppercase tracking-wider font-bold text-right">Wager:<br><span class="text-emerald-400 font-mono text-sm normal-case">BM$ ${formatMoney(userPart.wager)}</span></p>
+                        </div>
+                        ${opponentHtml}
+                        ${resultHtml}
+                    </div>
+                `;
+            });
+        }
+
+        // --- TAB 4: LEADERBOARD & SETTLEMENT ---
+        function renderLeaderboard() {
+            const tbody = document.getElementById('leaderboard-body');
+            tbody.innerHTML = '';
+            
+            const sorted = [...usersData].sort((a, b) => b.bankroll - a.bankroll);
+
+            sorted.forEach((user, index) => {
+                const isTop = index === 0;
+                const isMe = user.id === currentUser?.uid;
+                const rowClass = isMe ? "bg-slate-800/80 border-b border-slate-700" : "border-b border-slate-800";
+                const rankColor = isTop ? "text-amber-400 font-black text-lg" : "text-slate-400";
+                
+                const netPl = user.bankroll - INITIAL_FUNDS;
+                let plHtml = "";
+                if (netPl > 0) plHtml = `<span class="text-emerald-400">+${formatMoney(netPl)}</span>`;
+                else if (netPl < 0) plHtml = `<span class="text-rose-400">-${formatMoney(Math.abs(netPl))}</span>`;
+                else plHtml = `<span class="text-slate-500">EVEN</span>`;
+
+                tbody.innerHTML += `
+                    <tr class="${rowClass}">
+                        <td class="p-4 ${rankColor}">${index + 1}</td>
+                        <td class="p-4">
+                            <div class="font-bold ${isMe ? 'text-emerald-400' : 'text-white'}">${user.name} ${isTop ? '👑' : ''}</div>
+                        </td>
+                        <td class="p-4 text-center font-mono font-bold">${plHtml}</td>
+                        <td class="p-4 text-right font-mono font-bold text-white">
+                            BM$ ${formatMoney(user.bankroll)}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        window.openSettlementModal = function() {
+            const listContainer = document.getElementById('settlement-list');
+            listContainer.innerHTML = '';
+            
+            const sorted = [...usersData].sort((a, b) => b.bankroll - a.bankroll);
+            
+            sorted.forEach(user => {
+                const netPl = user.bankroll - INITIAL_FUNDS;
+                let text = "", colorClass = "";
+                if (netPl > 0) {
+                    text = `Is owed BM$ ${formatMoney(netPl)}`;
+                    colorClass = "text-emerald-400";
+                } else if (netPl < 0) {
+                    text = `Owes BM$ ${formatMoney(Math.abs(netPl))} to the pot`;
+                    colorClass = "text-rose-400";
+                } else {
+                    text = `Broke even`;
+                    colorClass = "text-slate-500";
+                }
+
+                listContainer.innerHTML += `
+                    <div class="flex justify-between items-center py-2 border-b border-slate-800 last:border-0">
+                        <span class="text-white font-bold">${user.name}</span>
+                        <span class="${colorClass} font-mono text-sm">${text}</span>
+                    </div>
+                `;
+            });
+
+            document.getElementById('settlement-modal').classList.remove('hidden');
+        };
+
+        window.confirmResetMonth = async function() {
+            if (!currentUser) return;
+            
+            // Note: Batch writes are best, doing sequential here for simplicity of prototype
+            // 1. Reset all users
+            for (const u of usersData) {
+                await updateDoc(doc(usersRef, u.id), { bankroll: INITIAL_FUNDS });
+            }
+            
+            // 2. Delete all challenges (to clear the board)
+            for (const ch of challengesData) {
+                await deleteDoc(doc(challengesRef, ch.id));
+            }
+
+            document.getElementById('settlement-modal').classList.add('hidden');
+            bankrollHistory = [INITIAL_FUNDS]; // Reset local graph
+            
+            alert("The month has been settled. Everyone's balance is reset to BM$ 100. Let the new games begin!");
+            showView('lobby');
+        };
+
+        // --- COMMISSIONER PANEL (Add & Settle Games) ---
+        window.openCommishModal = function() {
+            document.getElementById('commish-modal').classList.remove('hidden');
+            populateCommishDropdowns();
+        };
+
+        window.closeCommishModal = function() {
+            document.getElementById('commish-modal').classList.add('hidden');
+        };
+
+        window.switchCommishTab = function(tab) {
+            document.getElementById('commish-add-view').classList.add('hidden');
+            document.getElementById('commish-settle-view').classList.add('hidden');
+            document.getElementById('tab-add-match').className = "text-slate-400 hover:text-white font-bold border-b-2 border-transparent pb-2 transition";
+            document.getElementById('tab-settle-match').className = "text-slate-400 hover:text-white font-bold border-b-2 border-transparent pb-2 transition";
+
+            if (tab === 'add') {
+                document.getElementById('commish-add-view').classList.remove('hidden');
+                document.getElementById('tab-add-match').className = "text-amber-400 font-bold border-b-2 border-amber-400 pb-2";
+            } else {
+                document.getElementById('commish-settle-view').classList.remove('hidden');
+                document.getElementById('tab-settle-match').className = "text-amber-400 font-bold border-b-2 border-amber-400 pb-2";
+            }
+        };
+
+        document.getElementById('btn-commish-add').addEventListener('click', async () => {
+            const sport = document.getElementById('commish-sport').value;
+            const match = document.getElementById('commish-match').value;
+            const t1 = document.getElementById('commish-t1').value;
+            const t2 = document.getElementById('commish-t2').value;
+            const drivers = document.getElementById('commish-drivers').value;
+            const date = document.getElementById('commish-date').value;
+            const time = document.getElementById('commish-time').value;
+
+            if(!match || !date || !time) { alert("Match Name, Date, and Time are required."); return; }
+
+            const newMatch = {
+                sport, match, t1, t2, date, time, status: 'upcoming'
+            };
+            if(sport === 'F1' && drivers) newMatch.drivers = drivers;
+
+            await addDoc(matchesRef, newMatch);
+            
+            document.getElementById('commish-match').value = '';
+            document.getElementById('commish-t1').value = '';
+            document.getElementById('commish-t2').value = '';
+            document.getElementById('commish-drivers').value = '';
+            
+            alert("Match added to the Lobby!");
+        });
+
+        function populateCommishDropdowns() {
+            const sel = document.getElementById('commish-settle-match');
+            sel.innerHTML = '<option value="" disabled selected>Select an upcoming match...</option>';
+            const upcoming = matchesData.filter(m => m.status === 'upcoming');
+            upcoming.forEach(m => {
+                sel.innerHTML += `<option value="${m.id}">${m.match}</option>`;
+            });
+        }
+
+        window.commishSettleMatchChanged = function() {
+            const mId = document.getElementById('commish-settle-match').value;
+            const outSel = document.getElementById('commish-settle-outcome');
+            const match = matchesData.find(m => m.id === mId);
+            
+            if(!match) return;
+            const picks = getMarginPicks(match);
+            
+            outSel.innerHTML = '<option value="" disabled selected>Select the actual result...</option>';
+            picks.forEach(p => { outSel.innerHTML += `<option value="${p}">${p}</option>`; });
+            outSel.disabled = false;
+        };
+
+        document.getElementById('btn-commish-settle').addEventListener('click', async () => {
+            if (!currentUser) return;
+            const mId = document.getElementById('commish-settle-match').value;
+            const outcome = document.getElementById('commish-settle-outcome').value;
+            
+            if(!mId || !outcome) { alert("Please select a match and its actual result."); return; }
+
+            // Update Match Status
+            await updateDoc(doc(matchesRef, mId), { status: 'settled', result: outcome });
+
+            // Find all challenges for this match
+            const relatedChalls = challengesData.filter(c => c.eventId === mId && c.status !== 'settled');
+            
+            for (const ch of relatedChalls) {
+                const totalPool = ch.participants.reduce((sum, p) => sum + p.wager, 0);
+                const winners = ch.participants.filter(p => p.pick === outcome);
+                const winningWagers = winners.reduce((sum, p) => sum + p.wager, 0);
+                
+                let isRefund = winners.length === 0 || winners.length === ch.participants.length;
+                
+                // Payouts
+                for (const p of ch.participants) {
+                    const uData = usersData.find(u => u.id === p.uid);
+                    if (!uData) continue;
+                    
+                    let newBankroll = uData.bankroll;
+                    let wins = uData.won || 0;
+                    
+                    if (isRefund) {
+                        newBankroll += p.wager; // Refund
+                    } else if (p.pick === outcome) {
+                        const share = p.wager / winningWagers;
+                        newBankroll += totalPool * share; // Win payout
+                        wins += 1;
+                    }
+                    
+                    await updateDoc(doc(usersRef, p.uid), { bankroll: newBankroll, won: wins });
+                    if(p.uid === currentUser.uid) bankrollHistory.push(newBankroll);
+                }
+                
+                // Mark challenge settled
+                await updateDoc(doc(challengesRef, ch.id), { status: 'settled', actualResult: outcome, refund: isRefund });
+            }
+
+            alert("Match settled successfully. Payouts have been distributed.");
+            window.closeCommishModal();
+        });
+
+        // --- SQUAD CHAT / BANTER ---
+        window.toggleChat = function() {
+            chatOpen = !chatOpen;
+            const drawer = document.getElementById('chat-drawer');
+            const badge = document.getElementById('chat-badge');
+            
+            if (chatOpen) {
+                drawer.classList.remove('translate-x-full');
+                if(badge) badge.classList.add('hidden');
+                renderChat();
+            } else {
+                drawer.classList.add('translate-x-full');
+            }
+        };
+
+        function renderChat() {
+            const container = document.getElementById('chat-messages');
+            container.innerHTML = '';
+            
+            chatData.forEach(msg => {
+                const isMe = msg.sender === myUserData.name;
+                container.innerHTML += `
+                    <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                        <span class="text-[10px] text-slate-500 mb-1">${isMe ? 'You' : msg.sender} • ${msg.timeStr}</span>
+                        <div class="${isMe ? 'bg-indigo-600 text-white rounded-tl-xl rounded-tr-xl rounded-bl-xl' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-tl-xl rounded-tr-xl rounded-br-xl'} px-3 py-2 max-w-[85%] text-sm shadow-sm">
+                            ${msg.text}
+                        </div>
+                    </div>
+                `;
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function sendChatMessage() {
+            if (!currentUser) return;
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            await addDoc(chatRef, {
+                sender: myUserData.name,
+                text: text,
+                timeStr: timeStr,
+                timestamp: now.getTime()
+            });
+            
+            input.value = '';
+        }
+
+        document.getElementById('btn-send-chat').addEventListener('click', sendChatMessage);
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendChatMessage();
+        });
+
+        // --- HOW IT WORKS ---
+        window.openHowItWorks = function() { document.getElementById('how-it-works-modal').classList.remove('hidden'); };
+        window.closeHowItWorks = function() { document.getElementById('how-it-works-modal').classList.add('hidden'); };
+
+        // --- CHART ---
+        function initBankrollChart() {
+            const canvas = document.getElementById('bankrollChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (bankrollChartInstance) bankrollChartInstance.destroy();
+
+            const labels = bankrollHistory.map((_, i) => i === 0 ? 'Start' : `Action ${i}`);
+
+            bankrollChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Bankroll (BM$)',
+                        data: bankrollHistory,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#0f172a',
+                        pointBorderColor: '#10b981',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { display: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8', font: {family: 'JetBrains Mono'} } },
+                        x: { display: false }
+                    }
+                }
+            });
+        }
+
+        // --- EVENT LISTENERS ---
+        document.addEventListener('DOMContentLoaded', () => {
+            document.body.addEventListener('click', (e) => {
+                const target = e.target.closest('[data-action]');
+                if (!target) return;
+                const action = target.getAttribute('data-action');
+                const copyTarget = target.getAttribute('data-target');
+
+                if (action === 'view') {
+                    showView(copyTarget);
+                    window.scrollTo(0,0);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
