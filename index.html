@@ -479,12 +479,47 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Configuration with Error Handling
+        // ---------------------------------------------------------------------
+        // FIREBASE CONFIGURATION (REQUIRED FOR GITHUB PAGES)
+        // To make this work on GitHub Pages, you must create a free Firebase project.
+        // Go to console.firebase.google.com -> Create Project -> Add Web App
+        // Copy the config object and paste it below.
+        // Also ensure Firestore is enabled and Auth has "Anonymous" provider enabled.
+        // ---------------------------------------------------------------------
+        const fallbackConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
         let firebaseConfig = {};
         try {
-            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+            // Use internal environment variables if available, otherwise use the fallback above
+            firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : fallbackConfig;
         } catch (e) {
             console.warn("Could not parse firebase config", e);
+        }
+
+        // Display Setup Screen if Firebase Config is missing or still set to default values
+        if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {
+             document.getElementById('loading-screen').innerHTML = `
+                <div class="text-center px-6 max-w-lg">
+                    <h2 class="text-2xl font-black text-amber-500 uppercase mb-4">Database Setup Required</h2>
+                    <p class="text-slate-300 text-sm mb-4">To run BetMate on GitHub Pages with live multiplayer enabled, you need to connect it to a free Firebase database.</p>
+                    <ol class="text-left text-xs text-slate-400 list-decimal pl-5 space-y-2 mb-6">
+                        <li>Go to <a href="https://console.firebase.google.com/" target="_blank" class="text-emerald-400 underline font-bold">Firebase Console</a> and create a new project.</li>
+                        <li>Add a <b>Web App</b> to the project to get your <code>firebaseConfig</code> object.</li>
+                        <li>Enable <b>Anonymous Authentication</b> under Build > Authentication.</li>
+                        <li>Create a <b>Firestore Database</b>. Set security rules to: <code>allow read, write: if true;</code> for testing.</li>
+                        <li>Open this <code>index.html</code> file, scroll to line 470, and paste your config into the <code>fallbackConfig</code> variable.</li>
+                    </ol>
+                    <p class="text-slate-500 text-xs mt-4">Once added, refresh this page and you'll be connected to the lobby!</p>
+                </div>
+            `;
+            throw new Error("Missing Firebase Config - Please setup fallbackConfig");
         }
         
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'betmate-default';
