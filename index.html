@@ -101,7 +101,7 @@
                 <div>
                     <h1 class="text-3xl md:text-5xl font-black tracking-tighter uppercase italic">Bet<span class="text-emerald-500">Mate</span></h1>
                     <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1">
-                        <h2 class="text-sm md:text-md text-slate-400 font-medium">Multiplayer Pool Betting</h2>
+                        <h2 class="text-sm md:text-md text-slate-400 font-medium">Multiplayer Pool Betting <span id="offline-badge" class="hidden bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded font-bold uppercase ml-2">Offline Mode</span></h2>
                         <button onclick="window.openHowItWorks()" class="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-md border border-slate-600 transition flex items-center justify-center gap-1 w-max">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                             How it works
@@ -478,7 +478,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ---------------------------------------------------------------------
         // FIREBASE CONFIGURATION (User Provided)
@@ -494,6 +494,7 @@
         };
         
         const appId = 'betmate-82831-app';
+        let isOfflineMode = false; // Flag to enable local mode when Firebase is blocked
 
         function setLoadStatus(text) {
             const el = document.getElementById('load-status');
@@ -508,7 +509,12 @@
             setLoadStatus("Initializing App Data...");
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
-            db = getFirestore(app);
+            
+            // ADBLOCKER / MOBILE BYPASS: Force Long Polling instead of WebSockets
+            // This prevents Safari ITP, Brave Shields, and AdBlockers from killing the live connection.
+            db = initializeFirestore(app, {
+                experimentalForceLongPolling: true
+            });
 
             // Paths
             usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
@@ -517,30 +523,36 @@
             chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
         } catch (initErr) {
             console.error("Firebase Init Error:", initErr);
-            document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6"><h2 class="text-xl font-black text-rose-500 uppercase">Connection Error</h2><p class="text-slate-400 mt-2 text-sm">${initErr.message}</p></div>`;
+            showOfflineErrorOptions("Firebase Init Error: " + initErr.message);
         }
 
-        // Failsafe Timeout - If it gets stuck for 10 seconds, show the exact fix
+        // Failsafe Timeout - If it gets stuck for 10 seconds, show the offline fallback option
         let timeoutCheck = setTimeout(() => {
             const loader = document.getElementById('loading-screen');
             if (loader && !loader.classList.contains('hidden')) {
                 let errorDetails = "The app took too long to connect to Firebase.";
-                
                 if (window.location.protocol === 'file:') {
-                    errorDetails = "<b>You are opening this file directly from your computer (file://).</b> Firebase requires a web server to function. Please push this code to GitHub Pages, or use an extension like VSCode 'Live Server'.";
+                    errorDetails = "<b>You are opening this file directly from your computer (file://).</b> Firebase requires a web server to function.";
                 } else {
-                    errorDetails = "Your browser is blocking the connection to the database. Please <b>disable ad-blockers (like Brave Shields or uBlock)</b> or check if you are on a restricted work/school network.";
+                    errorDetails = "Your browser or network is blocking the connection to the live database (usually caused by strict school/work firewalls or Adblockers like Brave Shields).";
                 }
+                showOfflineErrorOptions(errorDetails);
+            }
+        }, 10000);
 
+        function showOfflineErrorOptions(errorDetails) {
+            const loader = document.getElementById('loading-screen');
+            if(loader) {
                 loader.innerHTML = `
                     <div class="text-center px-6 max-w-lg bg-slate-900 border border-rose-500 p-6 rounded-xl">
                         <h2 class="text-2xl font-black text-rose-500 uppercase mb-4">Connection Blocked</h2>
                         <p class="text-slate-300 text-sm mb-6">${errorDetails}</p>
-                        <button onclick="window.location.reload()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-3 rounded transition">Retry Connection</button>
+                        <button onclick="window.location.reload()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-3 rounded transition w-full mb-2">Retry Connection</button>
+                        <button onclick="window.startOfflineMode()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-3 rounded transition w-full shadow-[0_0_15px_rgba(79,70,229,0.4)]">Play in Offline (Local) Mode</button>
                     </div>
                 `;
             }
-        }, 10000);
+        }
 
         // Global Client State
         let currentUser = null;
@@ -565,7 +577,7 @@
                         try {
                             await signInWithCustomToken(auth, __initial_auth_token);
                         } catch (tokenErr) {
-                            console.warn("Custom token mismatch (expected if using your own Firebase config). Falling back to Anonymous Auth.", tokenErr);
+                            console.warn("Custom token mismatch. Falling back to Anonymous Auth.", tokenErr);
                             await signInAnonymously(auth);
                         }
                     } else {
@@ -574,7 +586,14 @@
                 } catch (err) {
                     clearTimeout(timeoutCheck);
                     console.error("Auth failed:", err);
-                    document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6 bg-slate-900 border border-rose-500 p-6 rounded-xl max-w-md"><h2 class="text-xl font-black text-rose-500 uppercase mb-2">Auth Error</h2><p class="text-slate-300 text-sm mb-4">${err.message}</p><p class="text-xs text-slate-400">Did you enable <b>Anonymous</b> sign-in inside the Authentication tab in Firebase?</p></div>`;
+                    
+                    // Specific handling for local storage / incognito block
+                    let errMsg = err.message;
+                    if (errMsg.includes("indexedDB") || errMsg.includes("storage")) {
+                        errMsg = "Your browser's Private/Incognito mode is blocking temporary storage, which is required to log in. Please open in a normal tab.";
+                    }
+
+                    showOfflineErrorOptions(`Auth Error: ${errMsg}<br><br><span class='text-xs'>Did you enable <b>Anonymous</b> sign-in inside the Authentication tab in Firebase?</span>`);
                 }
             };
 
@@ -615,23 +634,59 @@
             } catch (e) {
                 clearTimeout(timeoutCheck);
                 console.error("Database fetch error:", e);
-                
-                let errorDetails = e.message;
-                if (e.message.toLowerCase().includes("offline")) {
-                    if (window.location.protocol === 'file:') {
-                        errorDetails = "<b>You are opening this file directly from your computer (file://).</b> Firebase requires a web server to function. Please push this code to GitHub Pages, or use an extension like VSCode 'Live Server'.";
-                    } else {
-                        errorDetails = "Your browser is blocking the connection to the database. Please <b>disable ad-blockers (like Brave Shields or uBlock)</b> or check if you are on a restricted work/school network.";
-                    }
-                }
-
-                document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6 bg-slate-900 border border-rose-500 p-6 rounded-xl max-w-md"><h2 class="text-xl font-black text-rose-500 uppercase mb-2">Connection Blocked</h2><p class="text-slate-300 text-sm mb-4">${errorDetails}</p><p class="text-xs text-slate-500">Error Code: ${e.message}</p></div>`;
+                showOfflineErrorOptions(`Database Error: ${e.message}<br><br><span class='text-xs'>Check if you are on a restricted network or using an Ad-blocker.</span>`);
             }
+        }
+
+        // --- OFFLINE (LOCAL) MODE SETUP ---
+        window.startOfflineMode = function() {
+            isOfflineMode = true;
+            clearTimeout(timeoutCheck);
+            
+            // Mock Current User
+            currentUser = { uid: 'local-user-' + Date.now() };
+
+            // Mock Data
+            usersData = [
+                { id: 'bot1', name: "Dave 'The Unit'", bankroll: 180.00, won: 5 },
+                { id: 'bot2', name: "Sarah H.", bankroll: 110.50, won: 2 },
+                { id: 'bot3', name: "Bossman", bankroll: 40.00, won: 1 }
+            ];
+            
+            matchesData = [
+                { id: 'm1', sport: "Football", league: "FIFA World Cup", match: "New Zealand vs Italy", t1: "New Zealand", t2: "Italy", date: "Sunday", time: "4:00 AM", status: "upcoming" },
+                { id: 'm2', sport: "Football", league: "FIFA World Cup", match: "USA vs Wales", t1: "USA", t2: "Wales", date: "Friday", time: "8:00 AM", status: "upcoming" },
+                { id: 'm3', sport: "Rugby", match: "All Blacks vs South Africa", t1: "All Blacks", t2: "South Africa", date: "Saturday", time: "7:05 PM", status: "upcoming" }
+            ];
+            
+            challengesData = [
+                { id: 'c1', eventId: 'm1', matchName: "New Zealand vs Italy", creatorName: "Dave 'The Unit'", creatorId: 'bot1', status: "open", participants: [{ uid: 'bot1', name: "Dave 'The Unit'", pick: "Draw", wager: 20 }] }
+            ];
+            
+            chatData = [
+                { id: 'msg1', sender: "Dave 'The Unit'", text: "Anyone betting on NZ today?", timeStr: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), timestamp: Date.now() - 100000 }
+            ];
+
+            document.getElementById('loading-screen').classList.add('hidden');
+            document.getElementById('welcome-modal').classList.remove('hidden');
+            document.getElementById('offline-badge').classList.remove('hidden');
+        };
+
+        // Helper to refresh views in offline mode since onSnapshot won't fire
+        function refreshAllViews() {
+            if (!isOfflineMode) return;
+            updateHeaderBalances();
+            if(!document.getElementById('view-lobby').classList.contains('hidden')) renderLobby();
+            if(!document.getElementById('view-challenge').classList.contains('hidden')) renderCreateChallenge();
+            if(!document.getElementById('view-slips').classList.contains('hidden')) renderMySlips();
+            if(!document.getElementById('view-squad').classList.contains('hidden')) renderLeaderboard();
+            populateCommishDropdowns();
+            renderChat();
         }
 
         // --- REALTIME LISTENERS ---
         function setupRealtimeListeners() {
-            if (!currentUser) return;
+            if (!currentUser || isOfflineMode) return;
 
             // 1. Users (Leaderboard)
             onSnapshot(usersRef, (snapshot) => {
@@ -697,6 +752,7 @@
         }
 
         async function seedMatches() {
+            if (isOfflineMode) return;
             const seed = [
                 // FIFA World Cup (Men's)
                 { sport: "Football", league: "FIFA World Cup", match: "New Zealand vs Italy", t1: "New Zealand", t2: "Italy", date: "Sunday", time: "4:00 AM", status: "upcoming" },
@@ -738,18 +794,22 @@
             const inputName = document.getElementById('user-name-input').value.trim();
             if (!inputName) { alert("Please enter a name."); return; }
             
-            // Save to Firestore
-            const userDocRef = doc(usersRef, currentUser.uid);
-            await setDoc(userDocRef, { name: inputName, bankroll: INITIAL_FUNDS, won: 0 });
-            
             myUserData = { name: inputName, bankroll: INITIAL_FUNDS, won: 0, id: currentUser.uid };
+            
+            if (isOfflineMode) {
+                usersData.push(myUserData);
+            } else {
+                // Save to Firestore
+                const userDocRef = doc(usersRef, currentUser.uid);
+                await setDoc(userDocRef, { name: inputName, bankroll: INITIAL_FUNDS, won: 0 });
+            }
             
             document.getElementById('welcome-modal').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
-            // Small delay to allow CSS transition
             setTimeout(() => document.getElementById('main-app').classList.remove('opacity-0'), 50);
             document.getElementById('chat-fab').classList.remove('hidden');
             
+            if (isOfflineMode) refreshAllViews();
             showView('lobby');
         });
 
@@ -897,11 +957,22 @@
             };
             
             // Deduct funds
-            const newBal = myUserData.bankroll - wager;
-            await updateDoc(doc(usersRef, currentUser.uid), { bankroll: newBal });
-            bankrollHistory.push(newBal); // Update local graph
+            myUserData.bankroll -= wager;
+            bankrollHistory.push(myUserData.bankroll);
+            
+            if (isOfflineMode) {
+                const uMatch = usersData.find(u => u.id === currentUser.uid);
+                if (uMatch) uMatch.bankroll = myUserData.bankroll;
+                newChallenge.id = 'c' + Date.now();
+                challengesData.push(newChallenge);
+                alert("Challenge posted to the lobby! Your pick is hidden until others lock in.");
+                refreshAllViews();
+                showView('lobby');
+                return;
+            }
 
-            // Save Challenge to DB
+            // Save to Firebase
+            await updateDoc(doc(usersRef, currentUser.uid), { bankroll: myUserData.bankroll });
             await addDoc(challengesRef, newChallenge);
             
             alert("Challenge posted to the lobby! Your pick is hidden until others lock in.");
@@ -951,24 +1022,30 @@
             if(!pick || isNaN(wager) || wager <= 0) { alert("Please enter a valid pick and wager."); return; }
             if(wager > myUserData.bankroll) { alert(`Insufficient funds. Your balance is BM$ ${formatMoney(myUserData.bankroll)}`); return; }
 
-            const chRef = doc(challengesRef, activeJoinChallengeId);
-            const chDoc = await getDoc(chRef);
-            if (!chDoc.exists()) return;
-            let chData = chDoc.data();
+            const ch = challengesData.find(c => c.id === activeJoinChallengeId);
+            if (!ch) return;
 
             // Deduct funds
-            const newBal = myUserData.bankroll - wager;
-            await updateDoc(doc(usersRef, currentUser.uid), { bankroll: newBal });
-            bankrollHistory.push(newBal);
+            myUserData.bankroll -= wager;
+            bankrollHistory.push(myUserData.bankroll);
+            
+            let updatedParts = [...ch.participants, { uid: currentUser.uid, name: myUserData.name, pick: pick, wager: wager }];
 
-            // Update Challenge
-            let updatedParts = [...chData.participants, { uid: currentUser.uid, name: myUserData.name, pick: pick, wager: wager }];
-            await updateDoc(chRef, { participants: updatedParts, status: "matched" });
+            if (isOfflineMode) {
+                const uMatch = usersData.find(u => u.id === currentUser.uid);
+                if (uMatch) uMatch.bankroll = myUserData.bankroll;
+                ch.participants = updatedParts;
+                ch.status = "matched";
+                refreshAllViews();
+            } else {
+                // Update Firebase
+                await updateDoc(doc(usersRef, currentUser.uid), { bankroll: myUserData.bankroll });
+                await updateDoc(doc(challengesRef, activeJoinChallengeId), { participants: updatedParts, status: "matched" });
+            }
 
             document.getElementById('btn-confirm-join').classList.add('hidden');
             document.getElementById('join-pick').disabled = true;
             document.getElementById('join-wager').disabled = true;
-            
             document.getElementById('join-reveal').classList.remove('hidden');
         });
 
@@ -1115,13 +1192,22 @@
         window.confirmResetMonth = async function() {
             if (!currentUser) return;
             
-            // Note: Batch writes are best, doing sequential here for simplicity of prototype
-            // 1. Reset all users
+            if (isOfflineMode) {
+                usersData.forEach(u => u.bankroll = INITIAL_FUNDS);
+                myUserData.bankroll = INITIAL_FUNDS;
+                challengesData = [];
+                document.getElementById('settlement-modal').classList.add('hidden');
+                bankrollHistory = [INITIAL_FUNDS];
+                alert("The month has been settled. Everyone's balance is reset to BM$ 100.");
+                refreshAllViews();
+                showView('lobby');
+                return;
+            }
+
+            // Firebase writes
             for (const u of usersData) {
                 await updateDoc(doc(usersRef, u.id), { bankroll: INITIAL_FUNDS });
             }
-            
-            // 2. Delete all challenges (to clear the board)
             for (const ch of challengesData) {
                 await deleteDoc(doc(challengesRef, ch.id));
             }
@@ -1174,6 +1260,18 @@
             };
             if(sport === 'F1' && drivers) newMatch.drivers = drivers;
 
+            if (isOfflineMode) {
+                newMatch.id = 'm' + Date.now();
+                matchesData.push(newMatch);
+                alert("Match added to the Lobby!");
+                document.getElementById('commish-match').value = '';
+                document.getElementById('commish-t1').value = '';
+                document.getElementById('commish-t2').value = '';
+                document.getElementById('commish-drivers').value = '';
+                refreshAllViews();
+                return;
+            }
+
             await addDoc(matchesRef, newMatch);
             
             document.getElementById('commish-match').value = '';
@@ -1213,11 +1311,51 @@
             
             if(!mId || !outcome) { alert("Please select a match and its actual result."); return; }
 
-            // Update Match Status
-            await updateDoc(doc(matchesRef, mId), { status: 'settled', result: outcome });
-
-            // Find all challenges for this match
+            const match = matchesData.find(m => m.id === mId);
             const relatedChalls = challengesData.filter(c => c.eventId === mId && c.status !== 'settled');
+
+            if (isOfflineMode) {
+                if (match) { match.status = 'settled'; match.result = outcome; }
+
+                for (const ch of relatedChalls) {
+                    const totalPool = ch.participants.reduce((sum, p) => sum + p.wager, 0);
+                    const winners = ch.participants.filter(p => p.pick === outcome);
+                    const winningWagers = winners.reduce((sum, p) => sum + p.wager, 0);
+                    
+                    let isRefund = winners.length === 0 || winners.length === ch.participants.length;
+                    
+                    for (const p of ch.participants) {
+                        const uData = usersData.find(u => u.id === p.uid);
+                        if (!uData) continue;
+                        
+                        if (isRefund) {
+                            uData.bankroll += p.wager;
+                        } else if (p.pick === outcome) {
+                            const share = p.wager / winningWagers;
+                            uData.bankroll += totalPool * share;
+                            uData.won = (uData.won || 0) + 1;
+                        }
+                        
+                        if(p.uid === currentUser.uid) {
+                            myUserData.bankroll = uData.bankroll;
+                            myUserData.won = uData.won;
+                            bankrollHistory.push(uData.bankroll);
+                        }
+                    }
+                    
+                    ch.status = 'settled';
+                    ch.actualResult = outcome;
+                    ch.refund = isRefund;
+                }
+
+                alert("Match settled successfully. Payouts have been distributed.");
+                window.closeCommishModal();
+                refreshAllViews();
+                return;
+            }
+
+            // Firebase Update Match Status
+            await updateDoc(doc(matchesRef, mId), { status: 'settled', result: outcome });
             
             for (const ch of relatedChalls) {
                 const totalPool = ch.participants.reduce((sum, p) => sum + p.wager, 0);
@@ -1257,6 +1395,11 @@
         window.factoryResetDB = async function() {
             if(!confirm("WARNING: This will wipe ALL existing matches, challenges, and reset user bankrolls to load the Men's World Cup defaults. Continue?")) return;
             
+            if (isOfflineMode) {
+                alert("Factory reset is disabled in Offline Mode. Please refresh the page instead.");
+                return;
+            }
+
             // Delete existing matches
             for(const m of matchesData) {
                 await deleteDoc(doc(matchesRef, m.id));
@@ -1320,6 +1463,19 @@
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
+            if (isOfflineMode) {
+                chatData.push({
+                    id: 'msg' + Date.now(),
+                    sender: myUserData.name,
+                    text: text,
+                    timeStr: timeStr,
+                    timestamp: now.getTime()
+                });
+                input.value = '';
+                refreshAllViews();
+                return;
+            }
+
             await addDoc(chatRef, {
                 sender: myUserData.name,
                 text: text,
