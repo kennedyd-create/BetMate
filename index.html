@@ -524,15 +524,19 @@
         let timeoutCheck = setTimeout(() => {
             const loader = document.getElementById('loading-screen');
             if (loader && !loader.classList.contains('hidden')) {
+                let errorDetails = "The app took too long to connect to Firebase.";
+                
+                if (window.location.protocol === 'file:') {
+                    errorDetails = "<b>You are opening this file directly from your computer (file://).</b> Firebase requires a web server to function. Please push this code to GitHub Pages, or use an extension like VSCode 'Live Server'.";
+                } else {
+                    errorDetails = "Your browser is blocking the connection to the database. Please <b>disable ad-blockers (like Brave Shields or uBlock)</b> or check if you are on a restricted work/school network.";
+                }
+
                 loader.innerHTML = `
                     <div class="text-center px-6 max-w-lg bg-slate-900 border border-rose-500 p-6 rounded-xl">
-                        <h2 class="text-2xl font-black text-rose-500 uppercase mb-4">Connection Timeout</h2>
-                        <p class="text-slate-300 text-sm mb-4">The app took too long to connect to Firebase. This usually means one of two things:</p>
-                        <ul class="text-left text-xs text-slate-400 list-disc pl-5 space-y-2 mb-6">
-                            <li><b>Firestore Rules:</b> Your database permissions are denying access. Go to Firebase Console -> Firestore Database -> Rules, and make sure it says: <code>allow read, write: if true;</code></li>
-                            <li><b>Adblockers/Brave Browser:</b> Your browser is blocking Firebase scripts. Try turning off shields for this site.</li>
-                        </ul>
-                        <button onclick="window.location.reload()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-2 rounded transition">Retry Connection</button>
+                        <h2 class="text-2xl font-black text-rose-500 uppercase mb-4">Connection Blocked</h2>
+                        <p class="text-slate-300 text-sm mb-6">${errorDetails}</p>
+                        <button onclick="window.location.reload()" class="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-3 rounded transition">Retry Connection</button>
                     </div>
                 `;
             }
@@ -558,7 +562,12 @@
                 try {
                     setLoadStatus("Authenticating...");
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
+                        try {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } catch (tokenErr) {
+                            console.warn("Custom token mismatch (expected if using your own Firebase config). Falling back to Anonymous Auth.", tokenErr);
+                            await signInAnonymously(auth);
+                        }
                     } else {
                         await signInAnonymously(auth);
                     }
@@ -606,7 +615,17 @@
             } catch (e) {
                 clearTimeout(timeoutCheck);
                 console.error("Database fetch error:", e);
-                document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6 bg-slate-900 border border-rose-500 p-6 rounded-xl max-w-md"><h2 class="text-xl font-black text-rose-500 uppercase mb-2">Database Error</h2><p class="text-slate-300 text-sm mb-4">${e.message}</p><p class="text-xs text-slate-400">Please check your Firestore Security Rules.</p></div>`;
+                
+                let errorDetails = e.message;
+                if (e.message.toLowerCase().includes("offline")) {
+                    if (window.location.protocol === 'file:') {
+                        errorDetails = "<b>You are opening this file directly from your computer (file://).</b> Firebase requires a web server to function. Please push this code to GitHub Pages, or use an extension like VSCode 'Live Server'.";
+                    } else {
+                        errorDetails = "Your browser is blocking the connection to the database. Please <b>disable ad-blockers (like Brave Shields or uBlock)</b> or check if you are on a restricted work/school network.";
+                    }
+                }
+
+                document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6 bg-slate-900 border border-rose-500 p-6 rounded-xl max-w-md"><h2 class="text-xl font-black text-rose-500 uppercase mb-2">Connection Blocked</h2><p class="text-slate-300 text-sm mb-4">${errorDetails}</p><p class="text-xs text-slate-500">Error Code: ${e.message}</p></div>`;
             }
         }
 
