@@ -322,6 +322,7 @@
             <div class="border-b border-slate-700 mb-4 flex gap-4">
                 <button id="tab-add-match" class="text-amber-400 font-bold border-b-2 border-amber-400 pb-2" onclick="window.switchCommishTab('add')">Add Real Game</button>
                 <button id="tab-settle-match" class="text-slate-400 hover:text-white font-bold border-b-2 border-transparent pb-2 transition" onclick="window.switchCommishTab('settle')">Settle Results</button>
+                <button class="text-rose-400 hover:text-rose-300 font-bold border-b-2 border-transparent pb-2 transition ml-auto" onclick="window.factoryResetDB()">Factory Reset DB</button>
             </div>
 
             <!-- Add Match View -->
@@ -478,18 +479,33 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Configuration
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Configuration with Error Handling
+        let firebaseConfig = {};
+        try {
+            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        } catch (e) {
+            console.warn("Could not parse firebase config", e);
+        }
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'betmate-default';
 
-        // Paths
-        const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
-        const matchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'matches');
-        const challengesRef = collection(db, 'artifacts', appId, 'public', 'data', 'challenges');
-        const chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
+        let app, auth, db;
+        let usersRef, matchesRef, challengesRef, chatRef;
+
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+
+            // Paths
+            usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+            matchesRef = collection(db, 'artifacts', appId, 'public', 'data', 'matches');
+            challengesRef = collection(db, 'artifacts', appId, 'public', 'data', 'challenges');
+            chatRef = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
+        } catch (initErr) {
+            console.error("Firebase Init Error:", initErr);
+            document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6"><h2 class="text-xl font-black text-rose-500 uppercase">Connection Error</h2><p class="text-slate-400 mt-2 text-sm">${initErr.message}</p></div>`;
+        }
 
         // Global Client State
         let currentUser = null;
@@ -505,32 +521,31 @@
         let bankrollChartInstance = null;
         let chatOpen = false;
 
-        // Ensure user sees loading first
-        document.getElementById('loading-screen').classList.remove('hidden');
-
-        // Authentication Routine
-        const initAuth = async () => {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
+        if (auth && db) {
+            // Authentication Routine
+            const initAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (err) {
+                    console.error("Auth failed:", err);
+                    document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6"><h2 class="text-xl font-black text-rose-500 uppercase">Auth Error</h2><p class="text-slate-400 mt-2 text-sm">${err.message}</p></div>`;
                 }
-            } catch (err) {
-                console.error("Auth failed:", err);
-                alert("Failed to connect to the live server. Please refresh.");
-            }
-        };
+            };
 
-        initAuth();
+            initAuth();
 
-        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                currentUser = user;
-                await checkUserExists();
-                setupRealtimeListeners();
-            }
-        });
+            const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    currentUser = user;
+                    await checkUserExists();
+                    setupRealtimeListeners();
+                }
+            });
+        }
 
         // Check if user has joined the pool before
         async function checkUserExists() {
@@ -540,9 +555,10 @@
                 const snap = await getDoc(userDocRef);
                 if (snap.exists()) {
                     myUserData = snap.data();
+                    myUserData.id = currentUser.uid;
                     document.getElementById('loading-screen').classList.add('hidden');
                     document.getElementById('main-app').classList.remove('hidden');
-                    document.getElementById('main-app').classList.remove('opacity-0');
+                    setTimeout(() => document.getElementById('main-app').classList.remove('opacity-0'), 50);
                     document.getElementById('chat-fab').classList.remove('hidden');
                     updateHeaderBalances();
                     showView('lobby');
@@ -552,7 +568,8 @@
                     document.getElementById('welcome-modal').classList.remove('hidden');
                 }
             } catch (e) {
-                console.error(e);
+                console.error("Database fetch error:", e);
+                document.getElementById('loading-screen').innerHTML = `<div class="text-center px-6"><h2 class="text-xl font-black text-rose-500 uppercase">Database Error</h2><p class="text-slate-400 mt-2 text-sm">${e.message}</p></div>`;
             }
         }
 
@@ -625,10 +642,21 @@
 
         async function seedMatches() {
             const seed = [
+                // FIFA World Cup (Men's)
+                { sport: "Football", league: "FIFA World Cup", match: "New Zealand vs Italy", t1: "New Zealand", t2: "Italy", date: "Sunday", time: "4:00 AM", status: "upcoming" },
+                { sport: "Football", league: "FIFA World Cup", match: "USA vs Wales", t1: "USA", t2: "Wales", date: "Friday", time: "8:00 AM", status: "upcoming" },
+                { sport: "Football", league: "FIFA World Cup", match: "Argentina vs Germany", t1: "Argentina", t2: "Germany", date: "Saturday", time: "12:00 PM", status: "upcoming" },
+                { sport: "Football", league: "FIFA World Cup", match: "Brazil vs Spain", t1: "Brazil", t2: "Spain", date: "Sunday", time: "7:00 AM", status: "upcoming" },
+                { sport: "Football", league: "FIFA World Cup", match: "England vs France", t1: "England", t2: "France", date: "Monday", time: "8:00 AM", status: "upcoming" },
+                { sport: "Football", league: "FIFA World Cup", match: "Portugal vs Netherlands", t1: "Portugal", t2: "Netherlands", date: "Tuesday", time: "11:00 AM", status: "upcoming" },
+                { sport: "Football", league: "FIFA World Cup", match: "Mexico vs Colombia", t1: "Mexico", t2: "Colombia", date: "Wednesday", time: "9:00 AM", status: "upcoming" },
+                { sport: "Football", league: "FIFA World Cup", match: "Belgium vs Croatia", t1: "Belgium", t2: "Croatia", date: "Thursday", time: "8:00 AM", status: "upcoming" },
+                { sport: "Football", league: "FIFA World Cup", match: "Uruguay vs Italy", t1: "Uruguay", t2: "Italy", date: "Friday", time: "11:00 AM", status: "upcoming" },
+                
+                // Other Men's Sports
                 { sport: "Rugby", match: "All Blacks vs South Africa", t1: "All Blacks", t2: "South Africa", date: "Saturday", time: "7:05 PM", status: "upcoming" },
-                { sport: "Football", league: "FIFA World Cup", match: "New Zealand vs Brazil", t1: "New Zealand", t2: "Brazil", date: "Sunday", time: "4:00 AM", status: "upcoming" },
                 { sport: "F1", match: "British Grand Prix", t1: "F1", t2: "F1", drivers: "Verstappen, Norris, Hamilton, Russell, Piastri, Leclerc", date: "Monday", time: "2:00 AM", status: "upcoming" },
-                { sport: "Cricket", match: "Black Caps vs England", t1: "Black Caps", t2: "England", date: "Friday", time: "1:00 PM", status: "upcoming" }
+                { sport: "Cricket", match: "Black Caps vs India", t1: "Black Caps", t2: "India", date: "Friday", time: "1:00 PM", status: "upcoming" }
             ];
             for (const m of seed) {
                 await addDoc(matchesRef, m);
@@ -1169,6 +1197,30 @@
             alert("Match settled successfully. Payouts have been distributed.");
             window.closeCommishModal();
         });
+
+        window.factoryResetDB = async function() {
+            if(!confirm("WARNING: This will wipe ALL existing matches, challenges, and reset user bankrolls to load the Men's World Cup defaults. Continue?")) return;
+            
+            // Delete existing matches
+            for(const m of matchesData) {
+                await deleteDoc(doc(matchesRef, m.id));
+            }
+            // Delete existing challenges
+            for(const c of challengesData) {
+                await deleteDoc(doc(challengesRef, c.id));
+            }
+            // Reset users to 100
+            for(const u of usersData) {
+                await updateDoc(doc(usersRef, u.id), { bankroll: INITIAL_FUNDS });
+            }
+            
+            // Re-seed with new World Cup matches
+            await seedMatches();
+            
+            alert("Database reset! The Lobby now features the Men's FIFA World Cup schedule.");
+            window.closeCommishModal();
+            showView('lobby');
+        };
 
         // --- SQUAD CHAT / BANTER ---
         window.toggleChat = function() {
